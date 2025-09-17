@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Much Ado About Nothing -A2+, B1</title>
+    <title>Much Ado About Nothing - A2+, B1</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -149,7 +150,7 @@
         }
         #drop-zones {
             display: grid;
-            grid-template-columns: repeat(8, 1fr); /* 8 columns for two rows */
+            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
             gap: 10px;
         }
         .drop-zone {
@@ -179,7 +180,11 @@
             z-index: 2;
             object-fit: cover;
         }
-        .drag-over { background-color: #e8f5e9; }
+        /* Styling for the placeholder image while dragging */
+        .sortable-ghost {
+            opacity: 0.4;
+            border: 2px dashed #3498db;
+        }
         .correct-order { border: 3px solid #2ecc71; }
         .incorrect-order { border: 3px solid #e74c3c; }
 
@@ -328,35 +333,28 @@
             evt.currentTarget.className += " active";
         }
 
-        // --- DRAG AND DROP ACTIVITY ---
-        let isDragging = false;
-
+        // --- DRAG AND DROP ACTIVITY (REWRITTEN WITH SortableJS) ---
         document.addEventListener('DOMContentLoaded', (event) => {
             const imagePool = document.getElementById('image-pool');
             const dropZonesContainer = document.getElementById('drop-zones');
             const imageCount = 15;
             let images = [];
 
-            // Create an array of image numbers 1-15
+            // Create and shuffle images
             for (let i = 1; i <= imageCount; i++) { images.push(i); }
-            // Add the wild card image name to the array
             images.push('wild card');
-            // Shuffle the array
             images.sort(() => Math.random() - 0.5);
 
-            // Create image elements for each item in the shuffled array
+            // Populate the image pool
             images.forEach(name => {
                 const img = document.createElement('img');
                 img.src = `${name}.png`;
                 img.className = 'draggable-image';
-                img.draggable = true;
                 img.id = `img-${name}`;
-                img.addEventListener('dragstart', dragStart);
-                img.addEventListener('dragend', dragEnd);
                 imagePool.appendChild(img);
             });
             
-            // Create the 15 drop zones
+            // Create the drop zones
             for (let i = 1; i <= imageCount; i++) {
                 const zone = document.createElement('div');
                 zone.className = 'drop-zone';
@@ -364,57 +362,33 @@
                 const numberSpan = document.createElement('span');
                 numberSpan.textContent = i;
                 zone.appendChild(numberSpan);
-                zone.addEventListener('dragover', dragOver);
-                zone.addEventListener('dragleave', dragLeave);
-                zone.addEventListener('drop', drop);
                 dropZonesContainer.appendChild(zone);
             }
+
+            // Initialize Sortable for the image pool
+            const poolSortable = new Sortable(imagePool, {
+                group: 'shared-images', // Set a group name
+                animation: 150,
+                ghostClass: 'sortable-ghost'
+            });
+
+            // Initialize Sortable for each drop zone
+            const dropZones = document.querySelectorAll('.drop-zone');
+            dropZones.forEach(zone => {
+                new Sortable(zone, {
+                    group: 'shared-images',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    onAdd: function (evt) {
+                        // If a drop zone already has an image, send it back to the pool
+                        if (evt.to.querySelectorAll('.draggable-image').length > 1) {
+                            const oldImage = evt.to.querySelector('.draggable-image'); // This will be the image that was already there
+                            poolSortable.el.appendChild(oldImage);
+                        }
+                    }
+                });
+            });
         });
-
-        function dragStart(e) {
-            isDragging = true;
-            e.dataTransfer.setData('text/plain', e.target.id);
-        }
-        
-        function dragEnd(e) {
-            isDragging = false;
-        }
-
-        // Auto-scroll functionality
-        document.addEventListener('dragover', function(e) {
-            if (!isDragging) return;
-
-            const viewportHeight = window.innerHeight;
-            const scrollThreshold = 60; // pixels from edge
-
-            if (e.clientY < scrollThreshold) {
-                window.scrollBy(0, -10); // Scroll up
-            } else if (e.clientY > viewportHeight - scrollThreshold) {
-                window.scrollBy(0, 10); // Scroll down
-            }
-        });
-
-        function dragOver(e) {
-            e.preventDefault();
-            e.currentTarget.classList.add('drag-over');
-        }
-        
-        function dragLeave(e) {
-            e.currentTarget.classList.remove('drag-over');
-        }
-
-        function drop(e) {
-            e.preventDefault();
-            e.currentTarget.classList.remove('drag-over');
-            const id = e.dataTransfer.getData('text');
-            const draggableElement = document.getElementById(id);
-            const dropZone = e.currentTarget;
-            
-            if (dropZone.querySelector('img')) {
-                 document.getElementById('image-pool').appendChild(dropZone.querySelector('img'));
-            }
-            dropZone.appendChild(draggableElement);
-        }
         
         function checkImageOrder() {
             const dropZones = document.querySelectorAll('.drop-zone');
@@ -425,14 +399,15 @@
                 zone.classList.remove('correct-order', 'incorrect-order');
 
                 if (image) {
-                    const imageIdNumber = parseInt(image.id.split('-')[1]);
-                    if (imageIdNumber === correctNumber) {
+                    // Extract the number from the image id (e.g., "img-5" -> 5)
+                    const imageIdName = image.id.split('-')[1];
+                    if (imageIdName !== 'wild' && parseInt(imageIdName) === correctNumber) {
                         zone.classList.add('correct-order');
                     } else {
                         zone.classList.add('incorrect-order');
                     }
                 } else {
-                     zone.classList.add('incorrect-order');
+                     zone.classList.add('incorrect-order'); // Empty slot is incorrect
                 }
             });
         }
